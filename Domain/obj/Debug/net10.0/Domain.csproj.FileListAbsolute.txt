@@ -1,0 +1,11 @@
+F:\Projects\Safa-CRM\Domain\obj\Debug\net10.0\Domain.GeneratedMSBuildEditorConfig.editorconfig
+F:\Projects\Safa-CRM\Domain\obj\Debug\net10.0\Domain.AssemblyInfoInputs.cache
+F:\Projects\Safa-CRM\Domain\obj\Debug\net10.0\Domain.AssemblyInfo.cs
+F:\Projects\Safa-CRM\Domain\obj\Debug\net10.0\Domain.csproj.CoreCompileInputs.cache
+F:\Projects\Safa-CRM\Domain\bin\Debug\net10.0\Domain.deps.json
+F:\Projects\Safa-CRM\Domain\bin\Debug\net10.0\Domain.dll
+F:\Projects\Safa-CRM\Domain\bin\Debug\net10.0\Domain.pdb
+F:\Projects\Safa-CRM\Domain\obj\Debug\net10.0\Domain.dll
+F:\Projects\Safa-CRM\Domain\obj\Debug\net10.0\refint\Domain.dll
+F:\Projects\Safa-CRM\Domain\obj\Debug\net10.0\Domain.pdb
+F:\Projects\Safa-CRM\Domain\obj\Debug\net10.0\ref\Domain.dll
