@@ -15,6 +15,7 @@ public record GetSolutionsQuery(bool? ActiveOnly = true) : IRequest<IEnumerable<
 public record GetSolutionByIdQuery(Guid Id) : IRequest<SolutionDto>;
 public record CreateSolutionCommand(CreateSolutionRequest Request) : IRequest<SolutionDto>;
 public record UpdateSolutionCommand(Guid Id, UpdateSolutionRequest Request) : IRequest<SolutionDto>;
+public record DeleteSolutionCommand(Guid Id) : IRequest;
 
 // --- Handlers ---
 public class GetSolutionsHandler(IAppDbContext context) : IRequestHandler<GetSolutionsQuery, IEnumerable<SolutionDto>>
@@ -27,6 +28,16 @@ public class GetSolutionsHandler(IAppDbContext context) : IRequestHandler<GetSol
             .OrderBy(s => s.Name)
             .Select(s => new SolutionDto(s.Id, s.Name, s.Description, s.IsActive, s.CreatedAt))
             .ToListAsync(ct);
+    }
+}
+
+public class GetSolutionByIdHandler(IAppDbContext context) : IRequestHandler<GetSolutionByIdQuery, SolutionDto>
+{
+    public async Task<SolutionDto> Handle(GetSolutionByIdQuery q, CancellationToken ct)
+    {
+        var solution = await context.TechSolutions.FindAsync([q.Id], ct)
+            ?? throw new KeyNotFoundException("Solution not found.");
+        return new SolutionDto(solution.Id, solution.Name, solution.Description, solution.IsActive, solution.CreatedAt);
     }
 }
 
@@ -54,3 +65,24 @@ public class UpdateSolutionHandler(IAppDbContext context) : IRequestHandler<Upda
         return new SolutionDto(solution.Id, solution.Name, solution.Description, solution.IsActive, solution.CreatedAt);
     }
 }
+
+public class DeleteSolutionHandler(IAppDbContext context) : IRequestHandler<DeleteSolutionCommand>
+{
+    public async Task Handle(DeleteSolutionCommand cmd, CancellationToken ct)
+    {
+        var solution = await context.TechSolutions.FindAsync([cmd.Id], ct)
+            ?? throw new KeyNotFoundException("Solution not found.");
+
+        var usedInOrders = await context.SalesOrders.AnyAsync(o => o.Items.Any(i => i.SolutionId == cmd.Id), ct);
+        if (usedInOrders)
+        {
+            solution.IsActive = false;
+        }
+        else
+        {
+            context.TechSolutions.Remove(solution);
+        }
+        await context.SaveChangesAsync(ct);
+    }
+}
+

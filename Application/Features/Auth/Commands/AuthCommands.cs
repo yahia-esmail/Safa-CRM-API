@@ -32,10 +32,20 @@ public record ResetPasswordRequest(
     string ConfirmPassword);
 
 // --- Commands ---
-public record LoginCommand(string Email, string Password) : IRequest<AuthResponse>;
-public record RefreshTokenCommand(string RefreshToken) : IRequest<AuthResponse>;
-public record LogoutCommand(Guid UserId) : IRequest;
-public record RegisterCommand(RegisterRequest Request) : IRequest<AuthResponse>;
+public record LoginCommand(string Email, string Password, string IpAddress) : IRequest<AuthResponse>;
+public record RefreshTokenCommand(string RefreshToken, string IpAddress) : IRequest<AuthResponse>;
+public record LogoutCommand(Guid UserId, string IpAddress) : IRequest;
+public record RegisterCommand(RegisterRequest Request, string IpAddress) : IRequest<AuthResponse>;
 public record ForgotPasswordCommand(string Email) : IRequest;
 public record ResetPasswordCommand(ResetPasswordRequest Request) : IRequest;
+
+// --- Queries ---
+public record GetMeQuery : IRequest<MeResponse>;
+public record MeResponse(
+    Guid Id,
+    string Name,
+    string Email,
+    string Role,
+    bool HasSmtpConfig,
+    int UnreadNotifications);
 

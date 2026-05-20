@@ -17,5 +17,6 @@ public interface ICompanyRepository : IGenericRepository<Company>
         Guid? currentUserId,
         bool isAdmin,
         int page,
-        int size);
+        int size,
+        Guid? tagId = null);
 }

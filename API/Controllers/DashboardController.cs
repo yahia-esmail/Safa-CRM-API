@@ -22,4 +22,11 @@ public class DashboardController(IMediator mediator) : BaseController(mediator)
             return Ok(result);
         }
     }
+
+    [HttpGet("export/pdf")]
+    public async Task<IActionResult> ExportPdf([FromQuery] DateTime? from, [FromQuery] DateTime? to)
+    {
+        var result = await Mediator.Send(new GetDashboardPdfExportQuery(from, to, CurrentUserId, IsAdmin));
+        return File(result, "application/pdf", $"dashboard-{DateTime.UtcNow:yyyyMMddHHmmss}.pdf");
+    }
 }

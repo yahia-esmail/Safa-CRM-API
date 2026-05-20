@@ -10,7 +10,4 @@ public class UserRepository(AppDbContext context)
 {
     public async Task<SystemUser?> GetByEmailAsync(string email) =>
         await _dbSet.FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
-
-    public async Task<SystemUser?> GetByRefreshTokenAsync(string refreshToken) =>
-        await _dbSet.FirstOrDefaultAsync(u => u.RefreshToken == refreshToken);
 }

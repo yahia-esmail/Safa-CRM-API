@@ -23,7 +23,7 @@ public class JwtService(IConfiguration configuration)
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secret));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
@@ -32,6 +32,11 @@ public class JwtService(IConfiguration configuration)
             new Claim("role", user.Role.ToString()),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
+
+        if (user.TenantId.HasValue)
+        {
+            claims.Add(new Claim("TenantId", user.TenantId.Value.ToString()));
+        }
 
         var token = new JwtSecurityToken(
             issuer: _issuer,

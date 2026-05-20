@@ -22,7 +22,10 @@ public record CompanyDto(
     bool IsActive,
     Guid? AssignedToUserId,
     string? AssignedToName,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? ContractAttachment,
+    string? ApplicationForm,
+    System.Collections.Generic.IEnumerable<Application.Features.Tags.TagDto> Tags);
 
 public record CreateCompanyRequest(
     string ArabicName,
@@ -37,7 +40,9 @@ public record CreateCompanyRequest(
     string? LeadSource,
     string LeadStatus,
     decimal? ExpectedRevenue,
-    Guid? AssignedToUserId);
+    Guid? AssignedToUserId,
+    string? ContractAttachment,
+    string? ApplicationForm);
 
 public record UpdateCompanyRequest(
     string ArabicName,
@@ -52,7 +57,9 @@ public record UpdateCompanyRequest(
     string? LeadSource,
     string LeadStatus,
     decimal? ExpectedRevenue,
-    bool IsActive);
+    bool IsActive,
+    string? ContractAttachment,
+    string? ApplicationForm);
 
 public record AssignCompanyRequest(Guid AssignedToUserId);
 
@@ -67,6 +74,7 @@ public record GetCompaniesQuery(
     string? Stage,
     string? LeadStatus,
     Guid? AssignedTo,
+    Guid? TagId,
     Guid CurrentUserId,
     bool IsAdmin,
     int Page = 1,
@@ -87,3 +95,16 @@ public record DeleteCompanyCommand(Guid Id, Guid CurrentUserId, bool IsAdmin)
 
 public record AssignCompanyCommand(Guid CompanyId, Guid AssignedToUserId)
     : IRequest;
+
+public record StageHistoryDto(
+    Guid Id,
+    string FromStage,
+    string ToStage,
+    string? Reason,
+    Guid ChangedByUserId,
+    string ChangedByName,
+    DateTime CreatedAt);
+
+public record GetCompanyStageHistoryQuery(Guid CompanyId, Guid CurrentUserId, bool IsAdmin)
+    : IRequest<IEnumerable<StageHistoryDto>>;
+

@@ -21,7 +21,8 @@ public class CompanyRepository(AppDbContext context)
         Guid? currentUserId,
         bool isAdmin,
         int page,
-        int size)
+        int size,
+        Guid? tagId = null)
     {
         var query = _dbSet
             .Include(c => c.AssignedTo)
@@ -63,6 +64,10 @@ public class CompanyRepository(AppDbContext context)
         // Admin-only: filter by assigned sales rep
         if (isAdmin && assignedToUserId.HasValue)
             query = query.Where(c => c.AssignedToUserId == assignedToUserId.Value);
+
+        // Tag filter
+        if (tagId.HasValue)
+            query = query.Where(c => c.TagAssignments.Any(ta => ta.TagId == tagId.Value));
 
         var totalCount = await query.CountAsync();
 

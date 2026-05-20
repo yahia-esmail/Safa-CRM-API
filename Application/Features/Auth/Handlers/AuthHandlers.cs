@@ -4,11 +4,12 @@ using Domain.Entities;
 using Domain.Enums;
 using Domain.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Auth.Handlers;
 
 
-public class LoginHandler(IUserRepository userRepo, IJwtService jwtService)
+public class LoginHandler(IUserRepository userRepo, IJwtService jwtService, IAppDbContext dbContext)
     : IRequestHandler<LoginCommand, AuthResponse>
 {
     public async Task<AuthResponse> Handle(LoginCommand request, CancellationToken ct)
@@ -23,64 +24,111 @@ public class LoginHandler(IUserRepository userRepo, IJwtService jwtService)
             throw new UnauthorizedAccessException("Invalid email or password.");
 
         var accessToken = jwtService.GenerateAccessToken(user);
-        var refreshToken = jwtService.GenerateRefreshToken();
+        var refreshTokenString = jwtService.GenerateRefreshToken();
         var expiry = jwtService.RefreshTokenExpiry();
 
-        user.RefreshToken = refreshToken;
-        user.RefreshTokenExpiry = expiry;
-        userRepo.Update(user);
-        await userRepo.SaveChangesAsync();
+        var refreshToken = new RefreshToken
+        {
+            UserId = user.Id,
+            Token = refreshTokenString,
+            ExpiresAt = expiry,
+            CreatedByIp = request.IpAddress
+        };
+
+        dbContext.RefreshTokens.Add(refreshToken);
+        await dbContext.SaveChangesAsync(ct);
 
         return new AuthResponse(
-            accessToken, refreshToken,
+            accessToken, refreshTokenString,
             DateTime.UtcNow.AddMinutes(60),
             user.Id, user.Name, user.Email, user.Role.ToString());
     }
 }
 
-public class RefreshTokenHandler(IUserRepository userRepo, IJwtService jwtService)
+public class RefreshTokenHandler(IUserRepository userRepo, IJwtService jwtService, IAppDbContext dbContext)
     : IRequestHandler<RefreshTokenCommand, AuthResponse>
 {
     public async Task<AuthResponse> Handle(RefreshTokenCommand request, CancellationToken ct)
     {
-        var user = await userRepo.GetByRefreshTokenAsync(request.RefreshToken)
+        var refreshToken = await dbContext.RefreshTokens
+            .Include(rt => rt.User)
+            .FirstOrDefaultAsync(rt => rt.Token == request.RefreshToken, ct)
             ?? throw new UnauthorizedAccessException("Invalid refresh token.");
 
-        if (user.RefreshTokenExpiry < DateTime.UtcNow)
+        var user = refreshToken.User;
+
+        // If the token is revoked, it's a security breach. Revoke all tokens for this user.
+        if (refreshToken.IsRevoked)
+        {
+            var userTokens = await dbContext.RefreshTokens
+                .Where(rt => rt.UserId == user.Id && !rt.IsRevoked)
+                .ToListAsync(ct);
+            
+            foreach (var t in userTokens)
+            {
+                t.IsRevoked = true;
+                t.RevokedByIp = request.IpAddress;
+            }
+            await dbContext.SaveChangesAsync(ct);
+            throw new UnauthorizedAccessException("Compromised token detected. All sessions revoked.");
+        }
+
+        if (refreshToken.ExpiresAt < DateTime.UtcNow)
             throw new UnauthorizedAccessException("Refresh token has expired.");
 
+        // Valid token. Revoke it and generate a new one.
+        refreshToken.IsRevoked = true;
+        refreshToken.RevokedByIp = request.IpAddress;
+
         var accessToken = jwtService.GenerateAccessToken(user);
-        var newRefresh = jwtService.GenerateRefreshToken();
+        var newRefreshString = jwtService.GenerateRefreshToken();
         var expiry = jwtService.RefreshTokenExpiry();
 
-        user.RefreshToken = newRefresh;
-        user.RefreshTokenExpiry = expiry;
-        userRepo.Update(user);
-        await userRepo.SaveChangesAsync();
+        refreshToken.ReplacedByToken = newRefreshString;
+
+        var newRefreshToken = new RefreshToken
+        {
+            UserId = user.Id,
+            Token = newRefreshString,
+            ExpiresAt = expiry,
+            CreatedByIp = request.IpAddress
+        };
+
+        dbContext.RefreshTokens.Add(newRefreshToken);
+        await dbContext.SaveChangesAsync(ct);
 
         return new AuthResponse(
-            accessToken, newRefresh,
+            accessToken, newRefreshString,
             DateTime.UtcNow.AddMinutes(60),
             user.Id, user.Name, user.Email, user.Role.ToString());
     }
 }
 
-public class LogoutHandler(IUserRepository userRepo)
+public class LogoutHandler(IAppDbContext dbContext)
     : IRequestHandler<LogoutCommand>
 {
     public async Task Handle(LogoutCommand request, CancellationToken ct)
     {
-        var user = await userRepo.GetByIdAsync(request.UserId);
-        if (user is null) return;
-        user.RefreshToken = null;
-        user.RefreshTokenExpiry = null;
-        userRepo.Update(user);
-        await userRepo.SaveChangesAsync();
+        // Find all active tokens for the user and revoke them
+        var activeTokens = await dbContext.RefreshTokens
+            .Where(rt => rt.UserId == request.UserId && !rt.IsRevoked)
+            .ToListAsync(ct);
+
+        foreach (var t in activeTokens)
+        {
+            t.IsRevoked = true;
+            t.RevokedByIp = request.IpAddress;
+        }
+
+        if (activeTokens.Any())
+        {
+            await dbContext.SaveChangesAsync(ct);
+        }
     }
 }
 
 // ── Register ─────────────────────────────────────────────────────────────────
-public class RegisterHandler(IUserRepository userRepo, IJwtService jwtService)
+public class RegisterHandler(IUserRepository userRepo, IJwtService jwtService, IAppDbContext dbContext)
     : IRequestHandler<RegisterCommand, AuthResponse>
 {
     public async Task<AuthResponse> Handle(RegisterCommand cmd, CancellationToken ct)
@@ -107,19 +155,26 @@ public class RegisterHandler(IUserRepository userRepo, IJwtService jwtService)
         };
 
         await userRepo.AddAsync(user);
+        await userRepo.SaveChangesAsync(); // Save user to get ID
 
         // Issue tokens immediately so registration = logged in
         var accessToken  = jwtService.GenerateAccessToken(user);
-        var refreshToken = jwtService.GenerateRefreshToken();
+        var refreshTokenString = jwtService.GenerateRefreshToken();
         var expiry       = jwtService.RefreshTokenExpiry();
 
-        user.RefreshToken       = refreshToken;
-        user.RefreshTokenExpiry = expiry;
-        userRepo.Update(user);
-        await userRepo.SaveChangesAsync();
+        var refreshToken = new RefreshToken
+        {
+            UserId = user.Id,
+            Token = refreshTokenString,
+            ExpiresAt = expiry,
+            CreatedByIp = cmd.IpAddress
+        };
+
+        dbContext.RefreshTokens.Add(refreshToken);
+        await dbContext.SaveChangesAsync(ct);
 
         return new AuthResponse(
-            accessToken, refreshToken,
+            accessToken, refreshTokenString,
             DateTime.UtcNow.AddMinutes(60),
             user.Id, user.Name, user.Email, user.Role.ToString());
     }
@@ -166,7 +221,7 @@ public class ForgotPasswordHandler(IUserRepository userRepo, IEmailService email
 }
 
 // ── Reset Password ────────────────────────────────────────────────────────────
-public class ResetPasswordHandler(IUserRepository userRepo)
+public class ResetPasswordHandler(IUserRepository userRepo, IAppDbContext dbContext)
     : IRequestHandler<ResetPasswordCommand>
 {
     public async Task Handle(ResetPasswordCommand cmd, CancellationToken ct)
@@ -194,10 +249,45 @@ public class ResetPasswordHandler(IUserRepository userRepo)
         user.PasswordResetTokenExpiry = null;
 
         // Also invalidate any active sessions
-        user.RefreshToken       = null;
-        user.RefreshTokenExpiry = null;
+        var activeTokens = await dbContext.RefreshTokens
+            .Where(rt => rt.UserId == user.Id && !rt.IsRevoked)
+            .ToListAsync(ct);
+
+        foreach (var t in activeTokens)
+        {
+            t.IsRevoked = true;
+            t.RevokedByIp = "SystemReset";
+        }
 
         userRepo.Update(user);
+        await dbContext.SaveChangesAsync(ct);
         await userRepo.SaveChangesAsync();
     }
 }
+
+public class GetMeHandler(IAppDbContext dbContext, ICurrentUserService currentUser)
+    : IRequestHandler<GetMeQuery, MeResponse>
+{
+    public async Task<MeResponse> Handle(GetMeQuery q, CancellationToken ct)
+    {
+        var userId = currentUser.UserId ?? throw new UnauthorizedAccessException("Not authenticated.");
+
+        var user = await dbContext.Users
+            .IgnoreQueryFilters()
+            .Include(u => u.SmtpSetting)
+            .FirstOrDefaultAsync(u => u.Id == userId, ct)
+            ?? throw new UnauthorizedAccessException("User not found.");
+
+        var unreadCount = await dbContext.Notifications
+            .CountAsync(n => n.UserId == userId && !n.IsRead, ct);
+
+        return new MeResponse(
+            user.Id,
+            user.Name,
+            user.Email,
+            user.Role.ToString(),
+            user.SmtpSetting != null,
+            unreadCount);
+    }
+}
+

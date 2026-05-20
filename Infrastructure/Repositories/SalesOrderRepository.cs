@@ -32,13 +32,17 @@ public class SalesOrderRepository(AppDbContext context)
     {
         var prefix = $"INV/{year}/";
 
-        var lastSeq = await _dbSet
+        var invoices = await _dbSet
             .Where(o => o.InvoiceNumber.StartsWith(prefix))
-            .Select(o => o.InvoiceNumber.Substring(prefix.Length))
-            .Select(seq => int.Parse(seq))
-            .DefaultIfEmpty(0)
-            .MaxAsync();
+            .Select(o => o.InvoiceNumber)
+            .ToListAsync();
 
-        return $"{prefix}{(lastSeq + 1):D5}";
+        var maxSeq = invoices
+            .Select(o => o.Substring(prefix.Length))
+            .Select(seq => int.TryParse(seq, out var val) ? val : 0)
+            .DefaultIfEmpty(0)
+            .Max();
+
+        return $"{prefix}{(maxSeq + 1):D5}";
     }
 }

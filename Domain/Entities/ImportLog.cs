@@ -1,6 +1,8 @@
+using Domain.Common;
+
 namespace Domain.Entities;
 
-public class ImportLog
+public class ImportLog : IMustHaveTenant
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string FileName { get; set; } = string.Empty;
@@ -11,6 +13,9 @@ public class ImportLog
     public string? ErrorDetails { get; set; }               // JSON
     public Guid UploadedByUserId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public Guid TenantId { get; set; }
+    public Tenant? Tenant { get; set; }
 
     // Navigation
     public SystemUser UploadedBy { get; set; } = null!;

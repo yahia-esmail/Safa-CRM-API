@@ -2,6 +2,7 @@ using Application.Features.Auth.Commands;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 
 namespace API.Controllers;
@@ -11,11 +12,13 @@ namespace API.Controllers;
 public class AuthController(IMediator mediator) : ControllerBase
 {
     [HttpPost("login")]
+    [EnableRateLimiting("LoginPolicy")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         try
         {
-            var result = await mediator.Send(new LoginCommand(request.Email, request.Password));
+            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+            var result = await mediator.Send(new LoginCommand(request.Email, request.Password, ipAddress));
             return Ok(result);
         }
         catch (UnauthorizedAccessException ex)
@@ -29,7 +32,8 @@ public class AuthController(IMediator mediator) : ControllerBase
     {
         try
         {
-            var result = await mediator.Send(new RefreshTokenCommand(request.RefreshToken));
+            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+            var result = await mediator.Send(new RefreshTokenCommand(request.RefreshToken, ipAddress));
             return Ok(result);
         }
         catch (UnauthorizedAccessException ex)
@@ -44,11 +48,19 @@ public class AuthController(IMediator mediator) : ControllerBase
     {
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? User.FindFirstValue("sub")!);
-        await mediator.Send(new LogoutCommand(userId));
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+        await mediator.Send(new LogoutCommand(userId, ipAddress));
         return NoContent();
     }
 
     // ── New Endpoints ───────────────────────────────────────────────
+
+    [Authorize]
+    [HttpGet("me")]
+    public async Task<IActionResult> GetMe()
+    {
+        return Ok(await mediator.Send(new GetMeQuery()));
+    }
 
     [Authorize(Roles = "Admin")]
     [HttpPost("register")]
@@ -56,7 +68,8 @@ public class AuthController(IMediator mediator) : ControllerBase
     {
         try
         {
-            var result = await mediator.Send(new RegisterCommand(request));
+            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+            var result = await mediator.Send(new RegisterCommand(request, ipAddress));
             return Ok(result);
         }
         catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
@@ -66,6 +79,7 @@ public class AuthController(IMediator mediator) : ControllerBase
     }
 
     [HttpPost("forgot-password")]
+    [EnableRateLimiting("LoginPolicy")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
     {
         await mediator.Send(new ForgotPasswordCommand(request.Email));
@@ -73,6 +87,7 @@ public class AuthController(IMediator mediator) : ControllerBase
     }
 
     [HttpPost("reset-password")]
+    [EnableRateLimiting("LoginPolicy")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
     {
         try

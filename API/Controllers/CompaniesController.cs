@@ -1,6 +1,8 @@
 using Application.Features.Activities;
 using Application.Features.Companies;
 using Application.Features.Contacts;
+using Application.Features.Notes;
+using Application.Features.Tags;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,14 +19,28 @@ public class CompaniesController(IMediator mediator) : BaseController(mediator)
         [FromQuery] string? phone,  [FromQuery] string? accountType,
         [FromQuery] string? stage,  [FromQuery] string? leadStatus,
         [FromQuery] Guid? assignedTo,
+        [FromQuery] Guid? tagId,
         [FromQuery] int page = 1,   [FromQuery] int size = 20)
     {
         var result = await Mediator.Send(new GetCompaniesQuery(
             name, country, safaKey, email, phone, accountType,
-            stage, leadStatus, assignedTo, CurrentUserId, IsAdmin, page, size));
+            stage, leadStatus, assignedTo, tagId, CurrentUserId, IsAdmin, page, size));
         return Ok(result);
     }
-
+    [HttpGet("export")]
+    public async Task<IActionResult> Export(
+        [FromQuery] string? name,   [FromQuery] string? country,
+        [FromQuery] int? safaKey,   [FromQuery] string? email,
+        [FromQuery] string? phone,  [FromQuery] string? accountType,
+        [FromQuery] string? stage,  [FromQuery] string? leadStatus,
+        [FromQuery] Guid? assignedTo,
+        [FromQuery] Guid? tagId)
+    {
+        var result = await Mediator.Send(new GetCompaniesExportQuery(
+            name, country, safaKey, email, phone, accountType,
+            stage, leadStatus, assignedTo, tagId, CurrentUserId, IsAdmin));
+        return File(result, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"companies-{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
+    }
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
@@ -40,8 +56,15 @@ public class CompaniesController(IMediator mediator) : BaseController(mediator)
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateCompanyRequest request)
     {
-        var result = await Mediator.Send(new CreateCompanyCommand(request, CurrentUserId, IsAdmin));
-        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+        try
+        {
+            var result = await Mediator.Send(new CreateCompanyCommand(request, CurrentUserId, IsAdmin));
+            return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPut("{id:guid}")]
@@ -54,6 +77,7 @@ public class CompaniesController(IMediator mediator) : BaseController(mediator)
         }
         catch (KeyNotFoundException) { return NotFound(); }
         catch (UnauthorizedAccessException) { return Forbid(); }
+        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     [HttpDelete("{id:guid}")]
@@ -135,6 +159,162 @@ public class CompaniesController(IMediator mediator) : BaseController(mediator)
             var req = request with { CompanyId = id };
             var result = await Mediator.Send(new CreateActivityCommand(req, CurrentUserId, IsAdmin));
             return Ok(result);
+        }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+    }
+
+    [HttpPut("{companyId:guid}/activities/{activityId:guid}")]
+    public async Task<IActionResult> UpdateActivity(Guid companyId, Guid activityId, [FromBody] UpdateActivityRequest request)
+    {
+        try
+        {
+            var result = await Mediator.Send(new UpdateActivityCommand(activityId, request, CurrentUserId, IsAdmin));
+            return Ok(result);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [HttpPatch("{companyId:guid}/activities/{activityId:guid}/toggle-complete")]
+    public async Task<IActionResult> ToggleActivityCompletion(Guid companyId, Guid activityId, [FromQuery] bool isCompleted)
+    {
+        try
+        {
+            var result = await Mediator.Send(new ToggleActivityCompletionCommand(activityId, isCompleted, CurrentUserId, IsAdmin));
+            return Ok(result);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+    }
+
+    [HttpDelete("{companyId:guid}/activities/{activityId:guid}")]
+    public async Task<IActionResult> DeleteActivity(Guid companyId, Guid activityId)
+    {
+        try
+        {
+            await Mediator.Send(new DeleteActivityCommand(activityId, CurrentUserId, IsAdmin));
+            return NoContent();
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+    }
+
+    [HttpGet("{id:guid}/stage-history")]
+    public async Task<IActionResult> GetStageHistory(Guid id)
+    {
+        try
+        {
+            var result = await Mediator.Send(new GetCompanyStageHistoryQuery(id, CurrentUserId, IsAdmin));
+            return Ok(result);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+    }
+
+    [HttpPost("{id:guid}/tags/{tagId:guid}")]
+    public async Task<IActionResult> AssignTag(Guid id, Guid tagId)
+    {
+        try
+        {
+            await Mediator.Send(new AssignTagCommand(id, tagId, CurrentUserId, IsAdmin));
+            return Ok();
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+    }
+
+    [HttpDelete("{id:guid}/tags/{tagId:guid}")]
+    public async Task<IActionResult> RemoveTag(Guid id, Guid tagId)
+    {
+        try
+        {
+            await Mediator.Send(new RemoveTagCommand(id, tagId, CurrentUserId, IsAdmin));
+            return NoContent();
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+    }
+
+    [HttpGet("{id:guid}/notes")]
+    public async Task<IActionResult> GetNotes(Guid id)
+    {
+        try
+        {
+            var result = await Mediator.Send(new GetCompanyNotesQuery(id, CurrentUserId, IsAdmin));
+            return Ok(result);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+    }
+
+    [HttpPost("{id:guid}/notes")]
+    public async Task<IActionResult> CreateNote(Guid id, [FromBody] CreateNoteRequest request)
+    {
+        try
+        {
+            var result = await Mediator.Send(new CreateNoteCommand(id, request, CurrentUserId, IsAdmin));
+            return Ok(result);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+    }
+
+    [HttpPut("{companyId:guid}/notes/{noteId:guid}")]
+    public async Task<IActionResult> UpdateNote(Guid companyId, Guid noteId, [FromBody] UpdateNoteRequest request)
+    {
+        try
+        {
+            var result = await Mediator.Send(new UpdateNoteCommand(noteId, request, CurrentUserId, IsAdmin));
+            return Ok(result);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+    }
+
+    [HttpDelete("{companyId:guid}/notes/{noteId:guid}")]
+    public async Task<IActionResult> DeleteNote(Guid companyId, Guid noteId)
+    {
+        try
+        {
+            await Mediator.Send(new DeleteNoteCommand(noteId, CurrentUserId, IsAdmin));
+            return NoContent();
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+    }
+
+    [HttpPost("bulk-assign")]
+    public async Task<IActionResult> BulkAssign([FromBody] BulkAssignRequest request)
+    {
+        try
+        {
+            await Mediator.Send(new BulkAssignCommand(request, CurrentUserId, IsAdmin));
+            return Ok();
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+    }
+
+    [HttpPost("bulk-stage")]
+    public async Task<IActionResult> BulkStage([FromBody] BulkStageRequest request)
+    {
+        try
+        {
+            await Mediator.Send(new BulkStageCommand(request, CurrentUserId, IsAdmin));
+            return Ok();
+        }
+        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+    }
+
+    [HttpPost("bulk-delete")]
+    public async Task<IActionResult> BulkDelete([FromBody] BulkDeleteRequest request)
+    {
+        try
+        {
+            await Mediator.Send(new BulkDeleteCommand(request, CurrentUserId, IsAdmin));
+            return NoContent();
         }
         catch (UnauthorizedAccessException) { return Forbid(); }
     }

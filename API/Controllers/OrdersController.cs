@@ -9,8 +9,19 @@ namespace API.Controllers;
 public class OrdersController(IMediator mediator) : BaseController(mediator)
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll() =>
-        Ok(await Mediator.Send(new GetOrdersQuery(CurrentUserId, IsAdmin)));
+    public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int size = 20) =>
+        Ok(await Mediator.Send(new GetOrdersQuery(CurrentUserId, IsAdmin, page, size)));
+
+    [HttpGet("export")]
+    public async Task<IActionResult> Export(
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] string? status,
+        [FromQuery] Guid? companyId)
+    {
+        var result = await Mediator.Send(new GetOrdersExportQuery(from, to, status, companyId, CurrentUserId, IsAdmin));
+        return File(result, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"orders-{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
+    }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)

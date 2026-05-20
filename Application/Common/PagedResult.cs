@@ -2,14 +2,37 @@ namespace Application.Common;
 
 public class PagedResult<T>
 {
-    public IEnumerable<T> Items { get; set; } = [];
-    public int TotalCount { get; set; }
-    public int Page { get; set; }
-    public int Size { get; set; }
-    public int TotalPages => (int)Math.Ceiling((double)TotalCount / Size);
-    public bool HasNextPage => Page < TotalPages;
-    public bool HasPreviousPage => Page > 1;
+    public IEnumerable<T> Data { get; set; } = [];
+    public PaginationInfo Pagination { get; set; } = new();
+
+    public PagedResult() { }
+
+    public PagedResult(IEnumerable<T> data, int totalCount, int page, int pageSize)
+    {
+        Data = data;
+        var totalPages = pageSize > 0 ? (int)Math.Ceiling((double)totalCount / pageSize) : 0;
+        Pagination = new PaginationInfo
+        {
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = totalPages,
+            HasNextPage = page < totalPages,
+            HasPrevPage = page > 1
+        };
+    }
 }
+
+public class PaginationInfo
+{
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+    public int TotalCount { get; set; }
+    public int TotalPages { get; set; }
+    public bool HasNextPage { get; set; }
+    public bool HasPrevPage { get; set; }
+}
+
 
 public class Result<T>
 {

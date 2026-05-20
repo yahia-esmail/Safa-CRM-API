@@ -14,6 +14,9 @@ public class EmailServiceAdapter(EmailService inner) : IEmailService
 
     public Task SendBulkAsync(IEnumerable<(string Email, string Name)> recipients, string subject, string htmlBody) =>
         inner.SendBulkAsync(recipients, subject, htmlBody);
+
+    public Task<(bool Success, string Message)> TestConnectionAsync(string host, int port, string email, string password, string encryption) =>
+        inner.TestConnectionAsync(host, port, email, password, encryption);
 }
 
 // Adapter: JwtService → IJwtService
